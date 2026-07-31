@@ -6,21 +6,42 @@ Minimal URL shortener built with FastAPI, SQLAlchemy, and SQLite. Generates 6-ch
 
 - Python >= 3.12
 - [uv](https://github.com/astral-sh/uv) (for dependency management)
+- Redis (optional — rate limiter works in fail-open mode without it)
 
-## Quick Start
+## Fresh Start (from zero)
 
 ```bash
-# Install dependencies
+# 1. Clone & enter the project
+git clone <repo-url> && cd link_shortener
+
+# 2. Install dependencies (creates .venv + uv.lock if missing)
 uv sync
 
-# Run the server (with auto-reload)
+# 3. (Optional) Start Redis for rate limiting
+sudo docker compose up -d redis
+# Or install Redis locally: sudo apt install redis-server && sudo systemctl start redis
+
+# 4. Start the server — migrations run automatically on first boot
+uv run uvicorn main:app --reload
+```
+
+Server is at `http://localhost:8000`. Alembic creates `links.db` and applies all migrations on startup.
+
+## Running the Server
+
+```bash
+# Development (auto-reload)
 uv run uvicorn main:app --reload
 
-# Or without reload for production
+# Production (no reload, bind all interfaces)
 uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-The server starts at `http://localhost:8000`. On first run, Alembic automatically creates the database schema (`links.db`). Open it in a browser to use the web interface.
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL for rate limiter |
 
 ## Docker
 
@@ -156,10 +177,10 @@ curl -X POST http://localhost:8000/shorten \
 **Response:**
 
 ```json
-{"short_url": "/s/aB3xYz"}
+{"short_url": "http://localhost:8000/s/aB3xYz"}
 ```
 
-The `short_url` is returned as a relative path. Prepend your server address to get the full URL (e.g., `http://localhost:8000/s/aB3xYz`).
+The `short_url` is returned as a full URL ready to use.
 
 ### Redirect to original URL
 
@@ -180,14 +201,21 @@ curl -I http://localhost:8000/s/aB3xYz
 
 ## Tests
 
-The project uses **pytest** with an in-memory SQLite database for isolation.
+The project uses **pytest** with an in-memory SQLite database for isolation. Rate limiter tests auto-skip if Redis is not running.
 
 ```bash
-# Run all tests
+# Run all tests (rate limiter skipped without Redis)
 uv run pytest
 
-# With verbose output
+# Verbose output
 uv run pytest -v
+
+# Single test file
+uv run pytest tests/test_service.py -v
+
+# With Redis running — full coverage including rate limiter
+sudo docker compose up -d redis
+uv run pytest tests/test_rate_limiter.py -v
 ```
 
 Tests cover four layers:
