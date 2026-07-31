@@ -74,9 +74,9 @@ Tests cover three layers:
 - **Repository** — CRUD operations against in-memory SQLite
 - **API** — full endpoint integration via FastAPI's `TestClient`
 
-## Linting & Formatting
+## Linting, Formatting & Coverage
 
-The project uses **ruff** for linting and formatting.
+The project uses **ruff** for linting/formatting and **pytest-cov** for coverage.
 
 ```bash
 # Check for issues (lint + format)
@@ -86,6 +86,12 @@ uv run ruff format --check .
 # Auto-fix fixable issues & reformat
 uv run ruff check --fix .
 uv run ruff format .
+
+# Run tests with coverage report (fail_under = 80%)
+uv run pytest --cov
+
+# HTML coverage report (opens in browser)
+uv run pytest --cov --cov-report=html && xdg-open htmlcov/index.html
 ```
 
 ## Project Structure
