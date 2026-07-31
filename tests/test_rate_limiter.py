@@ -11,6 +11,22 @@ from starlette.testclient import TestClient
 from app.middleware import RateLimiterMiddleware
 
 
+# ---------------------------------------------------------------------------
+# Auto-skip the whole module when Redis is not reachable.
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="module", autouse=True)
+def _require_redis():
+    """Fail early with a skip if Redis cannot be reached."""
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect(("127.0.0.1", 6379))
+    except OSError:
+        pytest.skip("Redis not running — start via `docker compose up -d`")
+    finally:
+        sock.close()
+
+
 @pytest.fixture()
 async def redis_client():
     """Connect to local Redis (started via docker-compose)."""

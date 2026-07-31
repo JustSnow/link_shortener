@@ -1,34 +1,40 @@
-import aiosqlite
+"""Repository for link persistence — backed by SQLAlchemy + aiosqlite."""
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import LinkORM
 from app.models import Link
 
 
 class LinkRepository:
-    """Repository for link persistence over SQLite."""
+    """Repository for link CRUD over an async SQLAlchemy session."""
 
-    def __init__(self, db: aiosqlite.Connection):
-        self.db = db
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    # --- helpers ----------------------------------------------------------
+
+    @staticmethod
+    def _to_domain(row: LinkORM) -> Link:
+        return Link(id=row.id, original_url=row.original_url, created_at=row.created_at)
+
+    # --- public API -------------------------------------------------------
 
     async def create(self, link: Link) -> Link:
-        await self.db.execute(
-            "INSERT INTO links (id, original_url) VALUES (?, ?)",
-            (link.id, link.original_url),
-        )
-        await self.db.commit()
+        orm = LinkORM(id=link.id, original_url=link.original_url)
+        self.session.add(orm)
+        await self.session.commit()
         return link
 
     async def get_by_id(self, short_id: str) -> Link | None:
-        async with self.db.execute(
-            "SELECT id, original_url, created_at FROM links WHERE id = ?",
-            (short_id,),
-        ) as cursor:
-            row = await cursor.fetchone()
-        if row is None:
+        row = await self.session.execute(select(LinkORM).where(LinkORM.id == short_id))
+        result = row.scalar_one_or_none()
+        if result is None:
             return None
-        return Link(id=row[0], original_url=row[1], created_at=row[2])
+        return self._to_domain(result)
 
     async def exists(self, short_id: str) -> bool:
-        async with self.db.execute(
-            "SELECT 1 FROM links WHERE id = ?", (short_id,)
-        ) as cursor:
-            return await cursor.fetchone() is not None
+        stmt = select(LinkORM.id).where(LinkORM.id == short_id)
+        row = await self.session.execute(stmt)
+        return row.scalar() is not None

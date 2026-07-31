@@ -1,6 +1,6 @@
 # Link Shortener
 
-Minimal URL shortener built with FastAPI and SQLite. Generates 6-character random keys, stores links in a local `links.db`, and serves a simple frontend for creating shortened URLs.
+Minimal URL shortener built with FastAPI, SQLAlchemy, and SQLite. Generates 6-character random keys, stores links in a local `links.db` (managed by Alembic migrations), and serves a simple frontend for creating shortened URLs.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ uv run uvicorn main:app --reload
 uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-The server starts at `http://localhost:8000`. Open it in a browser to use the web interface.
+The server starts at `http://localhost:8000`. On first run, Alembic automatically creates the database schema (`links.db`). Open it in a browser to use the web interface.
 
 ## Docker
 
@@ -104,6 +104,45 @@ app.add_middleware(
 
 If Redis is unreachable the middleware **skips rate limiting** and lets the request through. This avoids blocking legitimate traffic when the cache layer is down.
 
+## Database & Migrations
+
+The schema is defined as SQLAlchemy ORM models in `app/db/models.py` and managed by **Alembic**. On every startup, pending migrations are applied automatically — no manual step needed.
+
+### Generating a new migration
+
+After changing `app/db/models.py`, generate a revision:
+
+```bash
+# Auto-detect schema changes
+uv run alembic revision --autogenerate -m "add new column"
+
+# Or create an empty revision for manual SQL
+uv run alembic revision -m "custom migration"
+```
+
+### Running migrations manually
+
+```bash
+# Apply all pending migrations
+uv run alembic upgrade head
+
+# Rollback one step
+uv run alembic downgrade -1
+
+# Check current version
+uv run alembic current
+
+# View migration history
+uv run alembic history
+```
+
+### How it works
+
+1. `main.py` lifespan calls `alembic upgrade head` on startup.
+2. Alembic reads the ORM models from `app/db/models.py` via `Base.metadata`.
+3. The `links.db` file is created/updated automatically — no manual schema management.
+4. Tests use an in-memory SQLite engine with tables created via `Base.metadata.create_all`, bypassing Alembic for speed.
+
 ## API
 
 ### Shorten a URL
@@ -137,6 +176,7 @@ curl -I http://localhost:8000/s/aB3xYz
 |--------|-----------|
 | `422`  | Invalid or missing URL in request body |
 | `404`  | Short link not found |
+| `429`  | Rate limit exceeded (see [Rate Limiter](#rate-limiter)) |
 
 ## Tests
 
@@ -150,11 +190,12 @@ uv run pytest
 uv run pytest -v
 ```
 
-Tests cover three layers:
+Tests cover four layers:
 
 - **Service** — key generation, shorten flow, collision retry, URL lookup (mocked repository)
 - **Repository** — CRUD operations against in-memory SQLite
 - **API** — full endpoint integration via FastAPI's `TestClient`
+- **Rate limiter** — sliding-window logic with real Redis (auto-skipped if Redis is down)
 
 ## Linting, Formatting & Coverage
 
@@ -184,8 +225,15 @@ link_shortener/
 ├── pyproject.toml                   # Dependencies and project metadata
 ├── static/
 │   └── index.html                   # Frontend page
+├── alembic.ini                      # Alembic configuration
+├── alembic/
+│   ├── env.py                       # Async-safe migration runner
+│   └── versions/                    # Migration scripts (auto-generated)
 ├── app/
 │   ├── models.py                    # Pydantic models (Link, ShortenRequest, etc.)
+│   ├── db/
+│   │   ├── __init__.py              # Engine + session factory
+│   │   └── models.py                # SQLAlchemy ORM models (single source of truth)
 │   ├── dependencies.py              # DI configuration
 │   ├── middleware.py                # RateLimiterMiddleware (Redis-backed)
 │   ├── repositories/
@@ -208,7 +256,8 @@ link_shortener/
 
 - **FastAPI** — web framework and API routing
 - **Uvicorn** — ASGI server
+- **SQLAlchemy 2.0 (async)** — ORM + connection pooling over aiosqlite
+- **Alembic** — database migrations (auto-applied on startup)
 - **Redis 7** — sliding-window rate limiter backend (redis.asyncio)
-- **aiosqlite** — async SQLite driver
 - **Pydantic** — request/response validation (`HttpUrl` type)
 - **pytest + pytest-asyncio** — testing with async support
