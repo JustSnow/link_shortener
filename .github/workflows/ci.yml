@@ -29,7 +29,7 @@ jobs:
 
       - name: Install project and dev dependencies
         run: |
-          pip install -e .
+          pip install .
           pip install pytest pytest-asyncio httpx ruff pytest-cov
 
       - name: Lint with ruff
