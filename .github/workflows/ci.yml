@@ -60,6 +60,12 @@ jobs:
       - name: Build and push Docker image
         if: github.event_name == 'push'
         run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.repository }}:latest
+          # 1. Construct the raw image path
+          RAW_IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.repository }}:latest"
+
+          # 2. Convert the entire string to lowercase
+          IMAGE=$(echo "$RAW_IMAGE" | tr '[:upper:]' '[:lower:]')
+
+          # 3. Run Docker commands using the lowercase variable
           docker build -t $IMAGE --build-arg GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} .
           docker push $IMAGE
