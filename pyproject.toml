@@ -48,3 +48,7 @@ fail_under = 80
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
