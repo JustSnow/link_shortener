@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import yaml
@@ -25,7 +24,7 @@ class Settings(BaseModel):
     rate_limit: RateLimitSettings = RateLimitSettings()
 
     @classmethod
-    def from_yaml(cls, path: Path | None = None) -> "Settings":
+    def from_yaml(cls, path: Path | None = None) -> Settings:
         """Load settings from YAML file, falling back to defaults."""
         if path is None:
             # Resolve relative to project root (two levels up from app/)

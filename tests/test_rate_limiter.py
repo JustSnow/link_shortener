@@ -1,6 +1,5 @@
 """Tests for Redis-backed sliding-log rate limiter middleware."""
 
-import asyncio
 from contextlib import asynccontextmanager
 
 import pytest
