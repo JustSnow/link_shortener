@@ -36,9 +36,56 @@
 
 ---
 
+## config/settings.yml + app/config.py — централизованная конфигурация
+
+Все настройки приложения вынесены в **`config/settings.yml`**:
+
+```yaml
+redis:
+  url: "redis://localhost:6379/0"
+
+rate_limit:
+  max_requests: 10        # запросов на окно
+  window_seconds: 60      # размер окна в секундах
+  method: "POST"          # HTTP-метод для ограничения
+  path: "/shorten"        # путь для защиты
+```
+
+Модуль **`app/config.py`** загружает YAML и валидирует через Pydantic:
+
+```python
+class RedisSettings(BaseModel):
+    url: str = "redis://localhost:6379/0"
+
+class RateLimitSettings(BaseModel):
+    max_requests: int = 10
+    window_seconds: int = 60
+    method: str = "POST"
+    path: str = "/shorten"
+
+class Settings(BaseModel):
+    redis: RedisSettings = RedisSettings()
+    rate_limit: RateLimitSettings = RateLimitSettings()
+```
+
+### Преимущества перед хардкодом
+
+- **Одно место правки.** Изменить лимит или URL Redis — один файл, без поиска по коду.
+- **Валидация типов.** Pydantic проверяет значения при загрузке — опечатка в `max_requests: "десять"` упадёт на старте, а не в рантайме.
+- **Дефолты из модели.** Если файл отсутствует или поле пропущено — используется значение по умолчанию из Pydantic. Приложение всегда стартует.
+- **Переменные окружения.** Каждое поле можно переопределить через env с префиксом `LINK_` (например, `LINK_REDIS_URL`).
+
+### Почему YAML, а не `.env`?
+
+YAML поддерживает вложенные структуры (`redis.url`, `rate_limit.max_requests`) — `.env` плоский и не группирует настройки. Для одного-двух параметров `.env` подходит; для нескольких секций YAML чище.
+
+---
+
 ## main.py — точка входа и lifespan
 
 ```python
+from app.config import settings
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     engine = create_engine()
@@ -49,7 +96,9 @@ async def lifespan(application: FastAPI):
     repo = LinkRepository(session_factory())
     configure_deps(LinkService(repo))
 
-    application.state.redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+    application.state.redis_client = aioredis.from_url(
+        settings.redis.url, decode_responses=True
+    )
 
     yield
 
@@ -59,7 +108,15 @@ async def lifespan(application: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(RateLimiterMiddleware, fastapi_app=app)
+rl = settings.rate_limit
+app.add_middleware(
+    RateLimiterMiddleware,
+    fastapi_app=app,
+    max_requests=rl.max_requests,
+    window_seconds=rl.window_seconds,
+    method=rl.method,
+    path=rl.path,
+)
 app.include_router(links_router)
 ```
 
@@ -69,7 +126,7 @@ app.include_router(links_router)
 2. **Запускает Alembic-миграции** — `_run_migrations()` вызывает `alembic upgrade head`, применяя все pending-ревижии. Схема БД всегда актуальна при старте.
 3. **Создаёт session factory + repository** — `async_sessionmaker` привязан к engine, репозиторий получает один session.
 4. **Конфигурирует DI** — глобальный синглтон `LinkService(repo)` устанавливается через `configure_deps()`.
-5. **Подключается к Redis** — клиент сохраняется в `app.state.redis_client` для middleware.
+5. **Подключается к Redis** — URL берётся из `settings.redis.url` (config/settings.yml). Клиент сохраняется в `app.state.redis_client` для middleware.
 6. **При остановке** — закрывает session, engine (connection pool), и Redis-клиент.
 
 ### Почему `lifespan`, а не `startup`/`shutdown`?
@@ -356,6 +413,19 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
 ### Почему pipeline?
 
 Четыре операции (`zremrangebyscore`, `zadd`, `zcard`, `expire`) выполняются атомарно за один round-trip к Redis. Без pipeline это было бы 4 отдельных запроса — медленнее и неатомарно (другой запрос мог бы проскользнуть между операциями).
+
+### Параметры из конфига
+
+Все параметры middleware читаются из `settings.rate_limit`:
+
+| Параметр | Поле в YAML | Дефолт |
+|----------|-------------|--------|
+| Лимит запросов | `rate_limit.max_requests` | `10` |
+| Размер окна | `rate_limit.window_seconds` | `60` |
+| HTTP-метод | `rate_limit.method` | `POST` |
+| Путь | `rate_limit.path` | `/shorten` |
+
+Изменить лимит — править `config/settings.yml`, не код.
 
 ### Fail-open поведение
 

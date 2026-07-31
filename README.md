@@ -37,11 +37,23 @@ uv run uvicorn main:app --reload
 uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-### Environment variables
+### Configuration
+
+All settings live in **`config/settings.yml`** and are loaded at startup via `app.config.Settings` (Pydantic models). Individual values can be overridden with environment variables using the `LINK_` prefix:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL for rate limiter |
+| `LINK_REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL for rate limiter |
+| `LINK_RATE_LIMIT_MAX_REQUESTS` | `10` | Requests allowed per window |
+| `LINK_RATE_LIMIT_WINDOW_SECONDS` | `60` | Sliding window size in seconds |
+
+Example:
+```bash
+export LINK_REDIS_URL="redis://my-redis:6379/1"
+uv run uvicorn main:app --reload
+```
+
+See [config/settings.yml](config/settings.yml) for the full schema.
 
 ## Docker
 
@@ -110,15 +122,20 @@ X-RateLimit-Remaining: 7
 
 ### Configuration
 
-Change limits by editing the `RateLimiterMiddleware` init in `main.py`:
+Rate limiter settings are defined in **`config/settings.yml`**:
 
-```python
-app.add_middleware(
-    RateLimiterMiddleware,
-    fastapi_app=app,
-    max_requests=20,   # requests allowed per window
-    window_seconds=60,  # sliding window size
-)
+```yaml
+rate_limit:
+  max_requests: 10        # requests allowed per window
+  window_seconds: 60      # sliding window size in seconds
+  method: "POST"          # HTTP method to limit
+  path: "/shorten"        # URL path to protect
+```
+
+Override from the environment:
+```bash
+export LINK_RATE_LIMIT_MAX_REQUESTS=20
+export LINK_RATE_LIMIT_WINDOW_SECONDS=120
 ```
 
 ### Fail-open behavior
@@ -251,6 +268,8 @@ uv run pytest --cov --cov-report=html && xdg-open htmlcov/index.html
 link_shortener/
 ├── main.py                          # FastAPI app entry point & lifespan
 ├── pyproject.toml                   # Dependencies and project metadata
+├── config/
+│   └── settings.yml                 # Application settings (Redis, rate limit)
 ├── static/
 │   └── index.html                   # Frontend page
 ├── alembic.ini                      # Alembic configuration
@@ -258,6 +277,7 @@ link_shortener/
 │   ├── env.py                       # Async-safe migration runner
 │   └── versions/                    # Migration scripts (auto-generated)
 ├── app/
+│   ├── config.py                    # Typed settings loader (YAML → Pydantic)
 │   ├── models.py                    # Pydantic models (Link, ShortenRequest, etc.)
 │   ├── db/
 │   │   ├── __init__.py              # Engine + session factory
