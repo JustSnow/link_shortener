@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn[standard]",
     "aiosqlite",
     "pydantic",
+    "redis",
 ]
 
 [dependency-groups]
