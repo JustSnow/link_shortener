@@ -12,7 +12,7 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
     """Per-IP sliding-window rate limiter using Redis sorted sets.
 
     Tracks request timestamps as scores in a ZSET per IP.
-    Defaults: 10 requests per 60-second window on POST /shorten only.
+    Configuration comes from ``config/settings.yml`` via ``app.config.Settings``.
 
     Expects the wrapped FastAPI app to have ``app.state.redis_client`` set
     (e.g. inside lifespan). Accessed lazily at request time.
@@ -24,18 +24,22 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         fastapi_app,
         max_requests: int = 10,
         window_seconds: int = 60,
+        method: str = "POST",
+        path: str = "/shorten",
     ):
         super().__init__(app)
         self._fastapi_app = fastapi_app
         self.max_requests = max_requests
         self.window_seconds = window_seconds
+        self.method = method
+        self.path = path
 
     @property
     def redis(self) -> redis.Redis:
         return self._fastapi_app.state.redis_client
 
     async def dispatch(self, request: Request, call_next):
-        if request.method != "POST" or request.url.path != "/shorten":
+        if request.method != self.method or request.url.path != self.path:
             return await call_next(request)
 
         client_ip = request.client.host

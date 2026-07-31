@@ -18,6 +18,7 @@ from app.middleware import RateLimiterMiddleware
 def _require_redis():
     """Fail early with a skip if Redis cannot be reached."""
     import socket
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.connect(("127.0.0.1", 6379))
@@ -27,23 +28,25 @@ def _require_redis():
         sock.close()
 
 
-@pytest.fixture()
-async def redis_client():
-    """Connect to local Redis (started via docker-compose)."""
-    client = aioredis.from_url("redis://localhost:6379/0", decode_responses=True)
-    yield client
-    await client.flushdb()
-    await client.close()
+def _make_app(max_requests=5, window_seconds=60):
+    """Build a minimal FastAPI app with rate limiter middleware.
 
-
-@pytest.fixture()
-def app(redis_client):
-    """Minimal FastAPI app with rate limiter middleware."""
+    Creates the Redis client *inside* the lifespan so it connects in the same
+    event loop that TestClient uses — avoids cross-loop RuntimeError.
+    """
+    redis_client = None
 
     @asynccontextmanager
     async def lifespan(a: FastAPI):
+        nonlocal redis_client
+        redis_client = aioredis.from_url(
+            "redis://localhost:6379/0", decode_responses=True
+        )
+        await redis_client.flushdb()  # clean slate for each test
         a.state.redis_client = redis_client
         yield
+        if redis_client is not None:
+            await redis_client.aclose()
 
     test_app = FastAPI(lifespan=lifespan)
 
@@ -56,14 +59,24 @@ def app(redis_client):
         return {"ok": True}
 
     test_app.add_middleware(
-        RateLimiterMiddleware, fastapi_app=test_app, max_requests=5, window_seconds=60
+        RateLimiterMiddleware,
+        fastapi_app=test_app,
+        max_requests=max_requests,
+        window_seconds=window_seconds,
     )
     return test_app
 
 
 @pytest.fixture()
-def client(app):
-    return TestClient(app)
+def client():
+    """TestClient wrapping a fresh app with its own Redis connection.
+
+    Must use ``with`` so the lifespan (which creates the Redis client) runs
+    before any request hits the middleware.
+    """
+    app = _make_app()
+    with TestClient(app) as c:
+        yield c
 
 
 class TestRateLimiter:
@@ -102,23 +115,11 @@ class TestRateLimiter:
             assert resp.status_code == 200
             assert resp.headers["X-RateLimit-Remaining"] == str(expected)
 
-    async def test_window_resets_after_expiry(self, redis_client):
+    def test_window_resets_after_expiry(self):
         """After the window expires, requests are allowed again."""
-        test_app = FastAPI()
-        test_app.state.redis_client = redis_client
+        app = _make_app(max_requests=3, window_seconds=1)
 
-        @test_app.post("/shorten")
-        async def shorten():
-            return {"ok": True}
-
-        test_app.add_middleware(
-            RateLimiterMiddleware,
-            fastapi_app=test_app,
-            max_requests=3,
-            window_seconds=1,  # 1-second window for fast testing
-        )
-
-        with TestClient(test_app) as c:
+        with TestClient(app) as c:
             # Exhaust limit
             for _ in range(3):
                 resp = c.post("/shorten", json={"url": "https://x.com"})
@@ -127,7 +128,9 @@ class TestRateLimiter:
             assert resp.status_code == 429
 
             # Wait for window to expire
-            await asyncio.sleep(1.1)
+            import time
+
+            time.sleep(1.1)
 
             # Should be allowed again
             assert c.post("/shorten", json={"url": "https://x.com"}).status_code == 200

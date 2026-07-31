@@ -1,0 +1,12 @@
+# Application settings — loaded at startup via app.config.Settings
+# Override individual values with environment variables (prefix: LINK_)
+#   e.g. LINK_REDIS_URL, LINK_RATE_LIMIT_MAX_REQUESTS
+
+redis:
+  url: "redis://localhost:6379/0"
+
+rate_limit:
+  max_requests: 10        # requests allowed per window
+  window_seconds: 60      # sliding window size in seconds
+  method: "POST"          # HTTP method to limit
+  path: "/shorten"        # URL path to protect

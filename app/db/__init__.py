@@ -1,6 +1,5 @@
 """Database engine and session factory."""
 
-import aiosqlite  # noqa: F401 — registered as async driver
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 DB_PATH = "links.db"
