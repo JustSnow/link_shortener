@@ -22,6 +22,88 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 
 The server starts at `http://localhost:8000`. Open it in a browser to use the web interface.
 
+## Docker
+
+Run the app with Redis (required for rate limiting) via **docker-compose**:
+
+```bash
+# Start app + Redis
+sudo docker compose up --build
+
+# Detached mode
+sudo docker compose up -d --build
+
+# Stop and remove containers
+sudo docker compose down
+```
+
+The stack includes two services:
+
+| Service | Image | Port |
+|---------|-------|------|
+| `app`   | Built from `Dockerfile` (multi-stage, Python 3.12-slim) | `8000` |
+| `redis` | `redis:7-alpine` | `6379` |
+
+SQLite data is persisted via a bind mount (`./links.db`), Redis data via a named volume.
+
+### Running without docker-compose
+
+```bash
+# Build the image
+sudo docker build -t link-shortener .
+
+# Run with a local Redis (must be running on port 6379)
+sudo docker run -p 8000:8000 \
+  -v $(pwd)/links.db:/app/links.db \
+  --network host \
+  link-shortener
+```
+
+## Rate Limiter
+
+The `/shorten` endpoint is protected by a **sliding-window rate limiter** backed by Redis sorted sets.
+
+### How it works
+
+1. Each request is identified by the client IP address.
+2. A Redis sorted set (`ratelimit:<ip>`) stores request timestamps as both members and scores.
+3. On each `POST /shorten`, entries older than the window are pruned, then the current timestamp is added.
+4. If the count exceeds the limit, a **`429 Too Many Requests`** response is returned.
+
+### Defaults
+
+| Parameter | Value |
+|-----------|-------|
+| Max requests | `10` |
+| Window size  | `60 seconds` |
+| Scope        | `POST /shorten` only (other endpoints are unrestricted) |
+
+### Response headers
+
+Successful responses include rate-limit metadata:
+
+```
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 7
+```
+
+### Configuration
+
+Change limits by editing the `RateLimiterMiddleware` init in `main.py`:
+
+```python
+app.add_middleware(
+    RateLimiterMiddleware,
+    fastapi_app=app,
+    max_requests=20,   # requests allowed per window
+    window_seconds=60,  # sliding window size
+)
+```
+
+### Fail-open behavior
+
+If Redis is unreachable the middleware **skips rate limiting** and lets the request through. This avoids blocking legitimate traffic when the cache layer is down.
+
 ## API
 
 ### Shorten a URL
@@ -105,15 +187,19 @@ link_shortener/
 ├── app/
 │   ├── models.py                    # Pydantic models (Link, ShortenRequest, etc.)
 │   ├── dependencies.py              # DI configuration
+│   ├── middleware.py                # RateLimiterMiddleware (Redis-backed)
 │   ├── repositories/
 │   │   └── link_repository.py       # Async SQLite CRUD operations
 │   ├── routers/
 │   │   └── links.py                 # API route handlers
 │   └── services/
 │       └── link_service.py          # Business logic (key gen, shorten, lookup)
+├── docker-compose.yml               # App + Redis stack
+├── Dockerfile                       # Multi-stage build (Python 3.12-slim)
 └── tests/
     ├── conftest.py                  # Shared fixtures (DB, repo, service, client)
     ├── test_api.py                  # Endpoint integration tests
+    ├── test_rate_limiter.py         # Rate limiter unit & integration tests
     ├── test_repository.py           # Repository CRUD tests
     └── test_service.py              # Service unit tests
 ```
@@ -122,6 +208,7 @@ link_shortener/
 
 - **FastAPI** — web framework and API routing
 - **Uvicorn** — ASGI server
+- **Redis 7** — sliding-window rate limiter backend (redis.asyncio)
 - **aiosqlite** — async SQLite driver
 - **Pydantic** — request/response validation (`HttpUrl` type)
 - **pytest + pytest-asyncio** — testing with async support
