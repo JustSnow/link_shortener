@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link Shortener</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5; }
+        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; max-width: 480px; }
+        h1 { margin-bottom: 1rem; font-size: 1.5rem; text-align: center; }
+        .input-group { display: flex; gap: 0.5rem; }
+        input[type="url"] { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+        button { padding: 0.5rem 1rem; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+        button:hover { background: #0052a3; }
+        .result { margin-top: 1rem; padding: 0.75rem; background: #e8f5e9; border-radius: 4px; word-break: break-all; display: none; }
+        .error { background: #ffebee; color: #c62828; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Сократить ссылку</h1>
+        <form id="shorten-form" class="input-group">
+            <input type="url" id="url-input" placeholder="https://example.com/very-long-url" required>
+            <button type="submit">Сократить</button>
+        </form>
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById("shorten-form");
+        const resultDiv = document.getElementById("result");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const url = document.getElementById("url-input").value;
+
+            try {
+                const res = await fetch("/shorten", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url }),
+                });
+
+                if (!res.ok) {
+                    throw new Error(res.status === 422 ? "Некорректный URL" : `Ошибка ${res.status}`);
+                }
+
+                const data = await res.json();
+                resultDiv.className = "result";
+                resultDiv.style.display = "block";
+                resultDiv.innerHTML = `<a href="${data.short_url}" target="_blank">${data.short_url}</a>`;
+            } catch (err) {
+                resultDiv.className = "result error";
+                resultDiv.style.display = "block";
+                resultDiv.textContent = err.message;
+            }
+        });
+    </script>
+</body>
+</html>
