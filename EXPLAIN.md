@@ -68,8 +68,10 @@ class Link(BaseModel):
     original_url: str
     created_at: datetime | None = None
 
+
 class ShortenRequest(BaseModel):
-    url: HttpUrl          # ← валидирует формат URL автоматически
+    url: HttpUrl  # ← валидирует формат URL автоматически
+
 
 class ShortenResponse(BaseModel):
     short_url: str
@@ -98,9 +100,11 @@ Pydantic BaseModel даёт:
 ```python
 _link_service: LinkService | None = None
 
+
 def configure(service: LinkService) -> None:
     global _link_service
     _link_service = service
+
 
 def get_link_service() -> LinkService:
     if _link_service is None:
@@ -122,8 +126,7 @@ FastAPI поддерживает factory-функции с yield:
 
 ```python
 @router.post("/shorten")
-async def shorten(body: ShortenRequest, service=Depends(get_link_service)):
-    ...
+async def shorten(body: ShortenRequest, service=Depends(get_link_service)): ...
 ```
 
 Но наш сервис — синглтон без состояния между запросами. Нет смысла создавать его на каждый запрос. Глобальная переменная + `Depends()` — это просто способ передать уже созданный экземпляр в роутер.
@@ -133,8 +136,9 @@ async def shorten(body: ShortenRequest, service=Depends(get_link_service)):
 ## app/services/link_service.py — бизнес-логика
 
 ```python
-CHARS = string.ascii_letters + string.digits   # a-zA-Z0-9 (62 символа)
-KEY_LEN = 6                                     # 62^6 ≈ 56 млрд комбинаций
+CHARS = string.ascii_letters + string.digits  # a-zA-Z0-9 (62 символа)
+KEY_LEN = 6  # 62^6 ≈ 56 млрд комбинаций
+
 
 class LinkService:
     @staticmethod
@@ -143,7 +147,7 @@ class LinkService:
 
     async def shorten(self, request: ShortenRequest) -> ShortenResponse:
         key = self._generate_key()
-        while await self.repository.exists(key):   # ← защита от коллизий
+        while await self.repository.exists(key):  # ← защита от коллизий
             key = self._generate_key()
 
         link = Link(id=key, original_url=str(request.url))
@@ -219,8 +223,11 @@ aiosqlite возвращает контекстный менеджер для к
 
 ```python
 @router.post("/shorten", response_model=ShortenResponse)
-async def shorten(body: ShortenRequest, service: LinkService = Depends(get_link_service)):
+async def shorten(
+    body: ShortenRequest, service: LinkService = Depends(get_link_service)
+):
     return await service.shorten(body)
+
 
 @router.get("/s/{short_id}")
 async def redirect(short_id: str, service: LinkService = Depends(get_link_service)):
@@ -228,6 +235,7 @@ async def redirect(short_id: str, service: LinkService = Depends(get_link_servic
     if original_url is None:
         raise HTTPException(status_code=404, detail="Link not found")
     return RedirectResponse(url=original_url, status_code=302)
+
 
 @router.get("/")
 async def index():

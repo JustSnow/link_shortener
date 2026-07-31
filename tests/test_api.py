@@ -1,9 +1,5 @@
 """Integration tests for API endpoints."""
 
-import pytest
-
-from app.dependencies import get_link_service
-
 
 class TestShortenEndpoint:
     def test_post_shorten_returns_200(self, app_client):
@@ -41,7 +37,10 @@ class TestRedirectEndpoint:
         response = app_client.get(f"/s/{short_id}", follow_redirects=False)
 
         assert response.status_code == 302
-        assert response.headers["location"] in ("https://example.com", "https://example.com/")
+        assert response.headers["location"] in (
+            "https://example.com",
+            "https://example.com/",
+        )
 
     def test_redirect_nonexistent_link_returns_404(self, app_client):
         response = app_client.get("/s/ZZZZZZ", follow_redirects=False)

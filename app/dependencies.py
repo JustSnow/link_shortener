@@ -1,8 +1,6 @@
 """Dependency injection providers — no circular imports."""
 
-from app.repositories.link_repository import LinkRepository
 from app.services.link_service import LinkService
-
 
 # Module-level singleton set during lifespan.
 _link_service: LinkService | None = None

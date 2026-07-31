@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 import aiosqlite
 from fastapi import FastAPI
 
-from app.dependencies import configure as configure_deps, get_link_service
+from app.dependencies import configure as configure_deps
 from app.repositories.link_repository import LinkRepository
 from app.routers.links import router as links_router
 from app.services.link_service import LinkService

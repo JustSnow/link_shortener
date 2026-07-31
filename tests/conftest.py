@@ -4,8 +4,7 @@ import aiosqlite
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import configure as configure_deps, _link_service
-from app.models import Link
+from app.dependencies import configure as configure_deps
 from app.repositories.link_repository import LinkRepository
 from app.services.link_service import LinkService
 
@@ -53,4 +52,5 @@ def app_client(db, repository):
 
     # Cleanup: reset the global so other tests aren't affected.
     import app.dependencies
+
     app.dependencies._link_service = None

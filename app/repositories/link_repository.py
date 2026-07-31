@@ -1,5 +1,3 @@
-from datetime import datetime
-
 import aiosqlite
 
 from app.models import Link

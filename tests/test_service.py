@@ -1,7 +1,7 @@
 """Unit tests for LinkService."""
 
 import random
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -68,7 +68,9 @@ class TestGetOriginalUrl:
     @pytest.mark.asyncio
     async def test_returns_url_when_found(self):
         repo = AsyncMock()
-        repo.get_by_id = AsyncMock(return_value=Link(id="abc", original_url="https://example.com"))
+        repo.get_by_id = AsyncMock(
+            return_value=Link(id="abc", original_url="https://example.com")
+        )
 
         svc = LinkService(repo)
         url = await svc.get_original_url("abc")

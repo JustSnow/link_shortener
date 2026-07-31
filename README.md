@@ -74,6 +74,20 @@ Tests cover three layers:
 - **Repository** — CRUD operations against in-memory SQLite
 - **API** — full endpoint integration via FastAPI's `TestClient`
 
+## Linting & Formatting
+
+The project uses **ruff** for linting and formatting.
+
+```bash
+# Check for issues (lint + format)
+uv run ruff check .
+uv run ruff format --check .
+
+# Auto-fix fixable issues & reformat
+uv run ruff check --fix .
+uv run ruff format .
+```
+
 ## Project Structure
 
 ```

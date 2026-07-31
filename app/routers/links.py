@@ -9,12 +9,18 @@ router = APIRouter()
 
 
 @router.post("/shorten", response_model=ShortenResponse)
-async def shorten(body: ShortenRequest, service: LinkService = Depends(get_link_service)):
+async def shorten(
+    body: ShortenRequest,
+    service: LinkService = Depends(get_link_service),
+):
     return await service.shorten(body)
 
 
 @router.get("/s/{short_id}")
-async def redirect(short_id: str, service: LinkService = Depends(get_link_service)):
+async def redirect(
+    short_id: str,
+    service: LinkService = Depends(get_link_service),
+):
     original_url = await service.get_original_url(short_id)
     if original_url is None:
         raise HTTPException(status_code=404, detail="Link not found")
